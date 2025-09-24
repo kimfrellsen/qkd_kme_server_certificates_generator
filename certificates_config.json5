@@ -1,0 +1,99 @@
+{
+  "cert_exp_time_days": 730,
+  "ca_cert_exp_time_days": 3650,
+  "certs_dir": "./certs",
+  "kmes": [
+    {
+      "id": 1,
+      "addr_for_saes": "127.0.0.1", // IP or DNS where KME server is reachable for its SAEs
+      "addr_for_kmes": "127.0.0.1",  // IP or DNS where KME server is reachable for other KMEs
+      "saes": [
+        {
+          "id": 1,
+          "client_certificate_serial": [
+            0x70,
+            0xf4,
+            0x4f,
+            0x56,
+            0xc,
+            0x3f,
+            0x27,
+            0xd4,
+            0xb2,
+            0x11,
+            0xa4,
+            0x78,
+            0x13,
+            0xaf,
+            0xd0,
+            0x3c,
+            0x3,
+            0x81,
+            0x3b,
+            0x8e
+          ],
+          "client_pfx_certificate_password": "password"
+        },
+        {
+          "id": 2,
+          "client_certificate_serial": [
+            0x70,
+            0xf4,
+            0x4f,
+            0x56,
+            0xc,
+            0x3f,
+            0x27,
+            0xd4,
+            0xb2,
+            0x11,
+            0xa4,
+            0x78,
+            0x13,
+            0xaf,
+            0xd0,
+            0x3c,
+            0x3,
+            0x81,
+            0x3b,
+            0x92
+          ],
+          "client_pfx_certificate_password": "password"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "addr_for_saes": "127.0.0.1", // IP or DNS where KME server is reachable for its SAEs
+      "addr_for_kmes": "127.0.0.1",  // IP or DNS where KME server is reachable for other KMEs
+      "saes": [
+        {
+          "id": 2,
+          "client_certificate_serial": [
+            0x2d,
+            0x28,
+            0x6e,
+            0xc1,
+            0x77,
+            0x46,
+            0x5a,
+            0xb8,
+            0xdf,
+            0x0,
+            0x90,
+            0xdb,
+            0x4,
+            0x69,
+            0xa0,
+            0xab,
+            0xa,
+            0x97,
+            0x38,
+            0x51
+          ],
+          "client_pfx_certificate_password": "password"
+        }
+      ]
+    }
+  ]
+}
