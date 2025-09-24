@@ -142,12 +142,10 @@ fn generate_zone_certificates(directory: &str, kme_config: &KmeConfig, cert_exp_
 
         // Sauvegarde PKCS#12 (pfx)
         let pkcs12 = Pkcs12::builder()
-            .build(
-                sae.client_pfx_certificate_password.as_str(),               // mot de passe du pfx
-                &format!("SAE-{}", sae.id), // friendly name
-                &client_pkey,
-                &client_cert,
-            )
+            .name(&format!("SAE-{}", sae.id))
+            .pkey(&client_pkey)
+            .cert(&client_cert)
+            .build2(sae.client_pfx_certificate_password.as_str())
             .unwrap();
         let der = pkcs12.to_der().unwrap();
         File::create(format!("{}/client_{}.pfx", directory, sae.id))
