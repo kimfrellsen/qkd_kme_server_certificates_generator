@@ -12,6 +12,7 @@ pub(crate) struct CertsConfig {
 pub(crate) struct KmeConfig {
     pub(crate) id: i64,
     pub(crate) addr_for_saes: String,
+    pub(crate) client_pfx_certificate_password: String,
     pub(crate) addr_for_kmes: String,
     pub(crate) saes: Vec<SaeConfig>
 }

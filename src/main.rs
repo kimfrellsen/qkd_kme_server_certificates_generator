@@ -1,18 +1,17 @@
 mod certs_config;
 
-use openssl::pkey::PKey;
-use openssl::ec::{EcGroup, EcKey};
-use openssl::nid::Nid;
-use openssl::x509::{X509, X509NameBuilder, X509ReqBuilder};
-use openssl::hash::MessageDigest;
+use crate::certs_config::KmeConfig;
 use openssl::asn1::{Asn1Integer, Asn1Time};
+use openssl::bn::BigNum;
+use openssl::ec::{EcGroup, EcKey};
+use openssl::hash::MessageDigest;
+use openssl::nid::Nid;
+use openssl::pkcs12::Pkcs12;
+use openssl::pkey::PKey;
+use openssl::x509::{X509NameBuilder, X509ReqBuilder, X509};
 use std::fs::File;
 use std::io::Write;
-use std::str::FromStr;
-use openssl::bn::BigNum;
 use std::string::String;
-use openssl::pkcs12::Pkcs12;
-use crate::certs_config::KmeConfig;
 
 const INTER_KMES_SUBDIR: &'static str = "/inter_kmes/";
 const COMPANY_NAME: &'static str = "QuantumVerse Innovation";
@@ -47,7 +46,8 @@ fn main() {
     }
 
     let inter_kmes_subdir_path = config.certs_dir.clone() + INTER_KMES_SUBDIR;
-    let _ = std::fs::create_dir(inter_kmes_subdir_path);
+    let _ = std::fs::create_dir(inter_kmes_subdir_path.as_str());
+    generate_inter_kmes_certificates(&inter_kmes_subdir_path, &config.kmes, config.cert_exp_time_days, config.ca_cert_exp_time_days);
 
     for kme in &config.kmes {
         let kme_subdir_path = config.certs_dir.clone() + "/kme-" + kme.id.to_string().as_str() + "-local-zone/";
@@ -56,7 +56,144 @@ fn main() {
         generate_zone_certificates(&kme_subdir_path, &kme, config.cert_exp_time_days, config.ca_cert_exp_time_days);
 
     }
+}
 
+fn generate_inter_kmes_certificates(directory: &str, kmes: &Vec<KmeConfig>, cert_exp_time_days: usize, ca_cert_exp_time_days: usize) {
+    for kme in kmes {
+        // --- Générer clé et certificat CA ---
+        let group = EcGroup::from_curve_name(Nid::SECP384R1).unwrap();
+        let ca_key = EcKey::generate(&group).unwrap();
+        let ca_pkey = PKey::from_ec_key(ca_key).unwrap();
+
+        let mut ca_name_builder = X509NameBuilder::new().unwrap();
+        ca_name_builder.append_entry_by_text("CN", &format!("ca_kme{}", kme.id)).unwrap();
+        let ca_name = ca_name_builder.build();
+
+        let mut ca_cert_builder = X509::builder().unwrap();
+        ca_cert_builder.set_version(2).unwrap();
+        ca_cert_builder.set_subject_name(&ca_name).unwrap();
+        ca_cert_builder.set_issuer_name(&ca_name).unwrap();
+        ca_cert_builder.set_pubkey(&ca_pkey).unwrap();
+        ca_cert_builder
+            .set_not_before(&Asn1Time::days_from_now(0).unwrap())
+            .unwrap();
+        ca_cert_builder
+            .set_not_after(&Asn1Time::days_from_now(ca_cert_exp_time_days as u32).unwrap())
+            .unwrap();
+        ca_cert_builder.set_serial_number(&gen_random_serial()).unwrap();
+        ca_cert_builder.sign(&ca_pkey, MessageDigest::sha256()).unwrap();
+        let ca_cert = ca_cert_builder.build();
+
+        // Sauvegarder CA
+        File::create(format!("{}/ca_kme{}.key", directory, kme.id))
+            .unwrap()
+            .write_all(&ca_pkey.private_key_to_pem_pkcs8().unwrap())
+            .unwrap();
+        File::create(format!("{}/ca_kme{}.crt", directory, kme.id))
+            .unwrap()
+            .write_all(&ca_cert.to_pem().unwrap())
+            .unwrap();
+
+        // --- Certificat serveur ---
+        let server_key = EcKey::generate(&group).unwrap();
+        let server_pkey = PKey::from_ec_key(server_key).unwrap();
+
+        let mut server_name_builder = X509NameBuilder::new().unwrap();
+        server_name_builder.append_entry_by_text("CN", kme.addr_for_kmes.as_str()).unwrap();
+        let server_name = server_name_builder.build();
+
+        let mut server_cert_builder = X509::builder().unwrap();
+        server_cert_builder.set_version(2).unwrap();
+        server_cert_builder.set_subject_name(&server_name).unwrap();
+        server_cert_builder.set_issuer_name(&ca_cert.subject_name()).unwrap();
+        server_cert_builder.set_pubkey(&server_pkey).unwrap();
+        server_cert_builder
+            .set_not_before(&Asn1Time::days_from_now(0).unwrap())
+            .unwrap();
+        server_cert_builder
+            .set_not_after(&Asn1Time::days_from_now(cert_exp_time_days as u32).unwrap())
+            .unwrap();
+        server_cert_builder.set_serial_number(&gen_random_serial()).unwrap();
+        server_cert_builder.sign(&ca_pkey, MessageDigest::sha256()).unwrap();
+        let server_cert = server_cert_builder.build();
+
+        File::create(format!("{}/kme{}_server.key", directory, kme.id))
+            .unwrap()
+            .write_all(&server_pkey.private_key_to_pem_pkcs8().unwrap())
+            .unwrap();
+        File::create(format!("{}/kme{}_server.crt", directory, kme.id))
+            .unwrap()
+            .write_all(&server_cert.to_pem().unwrap())
+            .unwrap();
+
+        // --- Certificats clients pour les autres KMEs ---
+        for other_kme in kmes {
+            if other_kme.id == kme.id {
+                continue;
+            }
+
+            let client_key = EcKey::generate(&group).unwrap();
+            let client_pkey = PKey::from_ec_key(client_key).unwrap();
+
+            let mut client_name_builder = X509NameBuilder::new().unwrap();
+            client_name_builder
+                .append_entry_by_text(
+                    "CN",
+                    &format!("kme{}-to-kme{}", other_kme.id, kme.id),
+                )
+                .unwrap();
+            let client_name = client_name_builder.build();
+
+            let mut client_cert_builder = X509::builder().unwrap();
+            client_cert_builder.set_version(2).unwrap();
+            client_cert_builder.set_subject_name(&client_name).unwrap();
+            client_cert_builder
+                .set_issuer_name(&ca_cert.subject_name())
+                .unwrap();
+            client_cert_builder.set_pubkey(&client_pkey).unwrap();
+            client_cert_builder
+                .set_not_before(&Asn1Time::days_from_now(0).unwrap())
+                .unwrap();
+            client_cert_builder
+                .set_not_after(&Asn1Time::days_from_now(cert_exp_time_days as u32).unwrap())
+                .unwrap();
+            client_cert_builder.set_serial_number(&gen_random_serial()).unwrap();
+            client_cert_builder.sign(&ca_pkey, MessageDigest::sha256()).unwrap();
+            let client_cert = client_cert_builder.build();
+
+            // Export PFX
+            let pfx = Pkcs12::builder()
+                .name(&format!("kme{}-to-kme{}", other_kme.id, kme.id))
+                .pkey(&client_pkey)
+                .cert(&client_cert)
+                .build2(other_kme.client_pfx_certificate_password.as_str())
+                .unwrap();
+
+            File::create(format!(
+                "{}/kme{}-to-kme{}.pfx",
+                directory, other_kme.id, kme.id
+            ))
+                .unwrap()
+                .write_all(&pfx.to_der().unwrap())
+                .unwrap();
+
+            // Export PEM
+            File::create(format!(
+                "{}/kme{}-to-kme{}.pem",
+                directory, other_kme.id, kme.id
+            ))
+                .unwrap()
+                .write_all(&client_cert.to_pem().unwrap())
+                .unwrap();
+            File::create(format!(
+                "{}/kme{}-to-kme{}-key.pem",
+                directory, other_kme.id, kme.id
+            ))
+                .unwrap()
+                .write_all(&client_pkey.private_key_to_pem_pkcs8().unwrap())
+                .unwrap();
+        }
+    }
 }
 
 fn generate_zone_certificates(directory: &str, kme_config: &KmeConfig, cert_exp_time_days: usize, ca_cert_exp_time_days: usize) {
