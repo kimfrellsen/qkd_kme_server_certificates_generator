@@ -70,7 +70,7 @@
       "client_pfx_certificate_password": "password", // password for KME pfx certificate to connect to other KMEs
       "saes": [
         {
-          "id": 2,
+          "id": 3,
           "client_certificate_serial": [
             0x2d,
             0x28,
