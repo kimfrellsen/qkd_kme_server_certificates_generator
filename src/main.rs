@@ -14,8 +14,6 @@ use std::io::Write;
 use std::string::String;
 
 const INTER_KMES_SUBDIR: &'static str = "/inter_kmes/";
-const COMPANY_NAME: &'static str = "QuantumVerse Innovation";
-const COUNTRY_CODE: &'static str = "FR";
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
@@ -60,7 +58,6 @@ fn main() {
 
 fn generate_inter_kmes_certificates(directory: &str, kmes: &Vec<KmeConfig>, cert_exp_time_days: usize, ca_cert_exp_time_days: usize) {
     for kme in kmes {
-        // --- Générer clé et certificat CA ---
         let group = EcGroup::from_curve_name(Nid::SECP384R1).unwrap();
         let ca_key = EcKey::generate(&group).unwrap();
         let ca_pkey = PKey::from_ec_key(ca_key).unwrap();
@@ -84,7 +81,6 @@ fn generate_inter_kmes_certificates(directory: &str, kmes: &Vec<KmeConfig>, cert
         ca_cert_builder.sign(&ca_pkey, MessageDigest::sha256()).unwrap();
         let ca_cert = ca_cert_builder.build();
 
-        // Sauvegarder CA
         File::create(format!("{}/ca_kme{}.key", directory, kme.id))
             .unwrap()
             .write_all(&ca_pkey.private_key_to_pem_pkcs8().unwrap())
@@ -94,7 +90,6 @@ fn generate_inter_kmes_certificates(directory: &str, kmes: &Vec<KmeConfig>, cert
             .write_all(&ca_cert.to_pem().unwrap())
             .unwrap();
 
-        // --- Certificat serveur ---
         let server_key = EcKey::generate(&group).unwrap();
         let server_pkey = PKey::from_ec_key(server_key).unwrap();
 
@@ -126,7 +121,6 @@ fn generate_inter_kmes_certificates(directory: &str, kmes: &Vec<KmeConfig>, cert
             .write_all(&server_cert.to_pem().unwrap())
             .unwrap();
 
-        // --- Certificats clients pour les autres KMEs ---
         for other_kme in kmes {
             if other_kme.id == kme.id {
                 continue;
@@ -161,7 +155,6 @@ fn generate_inter_kmes_certificates(directory: &str, kmes: &Vec<KmeConfig>, cert
             client_cert_builder.sign(&ca_pkey, MessageDigest::sha256()).unwrap();
             let client_cert = client_cert_builder.build();
 
-            // Export PFX
             let pfx = Pkcs12::builder()
                 .name(&format!("kme{}-to-kme{}", other_kme.id, kme.id))
                 .pkey(&client_pkey)
@@ -177,7 +170,6 @@ fn generate_inter_kmes_certificates(directory: &str, kmes: &Vec<KmeConfig>, cert
                 .write_all(&pfx.to_der().unwrap())
                 .unwrap();
 
-            // Export PEM
             File::create(format!(
                 "{}/kme{}-to-kme{}.pem",
                 directory, other_kme.id, kme.id
@@ -202,8 +194,6 @@ fn generate_zone_certificates(directory: &str, kme_config: &KmeConfig, cert_exp_
     let ca_pkey = PKey::from_ec_key(ca_ec).unwrap();
 
     let mut name_builder = X509NameBuilder::new().unwrap();
-    name_builder.append_entry_by_text("C", COUNTRY_CODE).unwrap();
-    name_builder.append_entry_by_text("O", COMPANY_NAME).unwrap();
     name_builder.append_entry_by_text("CN", format!("KME{} local CA", kme_config.id).as_str()).unwrap();
     let ca_name = name_builder.build();
 
@@ -234,8 +224,6 @@ fn generate_zone_certificates(directory: &str, kme_config: &KmeConfig, cert_exp_
         let client_pkey = PKey::from_ec_key(client_ec).unwrap();
 
         let mut client_name_builder = X509NameBuilder::new().unwrap();
-        client_name_builder.append_entry_by_text("C", COUNTRY_CODE).unwrap();
-        client_name_builder.append_entry_by_text("O", COMPANY_NAME).unwrap();
         client_name_builder
             .append_entry_by_text("CN", &format!("SAE-{}", sae.id))
             .unwrap();
@@ -253,7 +241,6 @@ fn generate_zone_certificates(directory: &str, kme_config: &KmeConfig, cert_exp_
             .set_not_after(&Asn1Time::days_from_now(cert_exp_time_days as u32).unwrap())
             .unwrap();
 
-        // Utiliser client_certificate_serial fourni dans la config
         let serial = Asn1Integer::from_bn(
             BigNum::from_slice(&sae.client_certificate_serial)
                 .unwrap()
@@ -267,7 +254,6 @@ fn generate_zone_certificates(directory: &str, kme_config: &KmeConfig, cert_exp_
             .unwrap();
         let client_cert = client_builder.build();
 
-        // Sauvegarde PEM
         File::create(format!("{}/client_{}_cert.pem", directory, sae.id))
             .unwrap()
             .write_all(&client_cert.to_pem().unwrap())
@@ -277,7 +263,6 @@ fn generate_zone_certificates(directory: &str, kme_config: &KmeConfig, cert_exp_
             .write_all(&client_pkey.private_key_to_pem_pkcs8().unwrap())
             .unwrap();
 
-        // Sauvegarde PKCS#12 (pfx)
         let pkcs12 = Pkcs12::builder()
             .name(&format!("SAE-{}", sae.id))
             .pkey(&client_pkey)
@@ -304,21 +289,17 @@ fn generate_zone_certificates(directory: &str, kme_config: &KmeConfig, cert_exp_
     let server_pkey = PKey::from_ec_key(server_ec).unwrap();
 
     let mut server_name_builder = X509NameBuilder::new().unwrap();
-    server_name_builder.append_entry_by_text("C", COUNTRY_CODE).unwrap();
-    server_name_builder.append_entry_by_text("O", COMPANY_NAME).unwrap();
     server_name_builder
         .append_entry_by_text("CN", kme_config.addr_for_saes.as_str())
         .unwrap();
     let server_name = server_name_builder.build();
 
-    // CSR serveur
     let mut server_req_builder = X509ReqBuilder::new().unwrap();
     server_req_builder.set_pubkey(&server_pkey).unwrap();
     server_req_builder.set_subject_name(&server_name).unwrap();
     server_req_builder.sign(&server_pkey, MessageDigest::sha256()).unwrap();
     let server_req = server_req_builder.build();
 
-    // Certificat serveur signé par le CA
     let mut server_builder = X509::builder().unwrap();
     server_builder.set_version(2).unwrap();
     server_builder.set_subject_name(server_req.subject_name()).unwrap();
@@ -332,11 +313,9 @@ fn generate_zone_certificates(directory: &str, kme_config: &KmeConfig, cert_exp_
         .unwrap();
     server_builder.set_serial_number(&gen_random_serial()).unwrap();
 
-    // Signature par le CA
     server_builder.sign(&ca_pkey, MessageDigest::sha256()).unwrap();
     let server_cert = server_builder.build();
 
-    // Sauvegarde en .crt / .key
     File::create(format!("{}/kme_server.crt", directory))
         .unwrap()
         .write_all(&server_cert.to_pem().unwrap())
