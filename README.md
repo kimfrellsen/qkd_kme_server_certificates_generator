@@ -1,6 +1,6 @@
 # TLS certificate generator for ETSI GS QKD 014 KME server
 
-This script allows you to automatically generate all TLS certificates to operate the KME ETSI GS QKD 014 server https://github.com/thomasarmel/qkd_kme_server correctly for your network topology.
+This script allows you to automatically generate all TLS certificates to operate the ETSI GS QKD 014 KME server https://github.com/thomasarmel/qkd_kme_server correctly for your network topology.
 
 So that you can avoid manual and error-prone operations using OpenSSL commands.
 
@@ -78,3 +78,26 @@ The following directories and files will be created in the directory specified b
   - **client_{sae_id}.pem** PEM file containing the client certificate and private key that SAE {sae_id} will use to authenticate to this KME, signed by **ca.crt**. This file is equivalent of **client_{sae_id}.pfx** and it is not password-protected.
   - **client_{sae_id}.crt** client certificate that SAE {sae_id} will use to authenticate to this KME, signed by **ca.crt**.
   - **client_{sae_id}.key** private key corresponding to **client_{sae_id}.crt**.
+
+
+## How to correctly configure the KME server?
+
+Below, we give you the correspondance paths between the generated files and the configuration parameters of our [KME server](https://github.com/thomasarmel/qkd_kme_server).
+
+### SAEs interface:
+
+- **this_kme/saes_https_interface/ca_client_cert_path**: `kme-{kme_id}-local-zone/ca.crt`
+- **this_kme/saes_https_interface/server_cert_path**: `kme-{kme_id}-local-zone/kme_server.crt`
+- **this_kme/saes_https_interface/server_key_path**: `kme-{kme_id}-local-zone/kme_server.key`
+- **saes/{sae_id}/https_client_certificate_serial**: The certificate number as you specified it in the configuration file, in the `client_certificate_serial` field of SAE {sae_id}, if SAE belongs to this KME. Otherwise do not specify this field.
+
+And SAEs will use either `kme-{kme_id}-local-zone/client_{sae_id}.pfx` (with password `client_pfx_certificate_password` from configuration file) or `kme-{kme_id}-local-zone/client_{sae_id}.pem` to authenticate to this KME.
+
+
+### KMEs interface:
+
+- **this_kme/kmes_https_interface/ca_client_cert_path**: `inter_kmes/ca_kme{kme_id}.crt`
+- **this_kme/kmes_https_interface/server_cert_path**: `inter_kmes/kme{kme_id}_server.crt`
+- **this_kme/kmes_https_interface/server_key_path**: `inter_kmes/kme{kme_id}_server.key`
+- **other_kmes/{other_kme_id}/https_client_authentication_certificate**: `inter_kmes/kme{kme_id}-to-kme{other_kme_id}.pfx` (or `inter_kmes/kme{kme_id}-to-kme{other_kme_id}.pem` under MacOS, as this operating system does not support PKCS#12 files).
+- **other_kmes/{other_kme_id}/https_client_authentication_certificate_password**: The password you specified in the configuration file, in the `client_pfx_certificate_password` field of KME {kme_id} (not needed for `.pem` client certificate.
