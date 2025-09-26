@@ -170,20 +170,13 @@ fn generate_inter_kmes_certificates(directory: &str, kmes: &Vec<KmeConfig>, cert
                 .write_all(&pfx.to_der().unwrap())
                 .unwrap();
 
-            File::create(format!(
+            let mut pem_client_key = File::create(format!(
                 "{}/kme{}-to-kme{}.pem",
                 directory, other_kme.id, kme.id
-            ))
-                .unwrap()
-                .write_all(&client_cert.to_pem().unwrap())
-                .unwrap();
-            File::create(format!(
-                "{}/kme{}-to-kme{}-key.pem",
-                directory, other_kme.id, kme.id
-            ))
-                .unwrap()
-                .write_all(&client_pkey.private_key_to_pem_pkcs8().unwrap())
-                .unwrap();
+            )).unwrap();
+
+            pem_client_key.write_all(&client_pkey.private_key_to_pem_pkcs8().unwrap()).unwrap();
+            pem_client_key.write_all(&client_cert.to_pem().unwrap()).unwrap();
         }
     }
 }
@@ -254,14 +247,9 @@ fn generate_zone_certificates(directory: &str, kme_config: &KmeConfig, cert_exp_
             .unwrap();
         let client_cert = client_builder.build();
 
-        File::create(format!("{}/client_{}_cert.pem", directory, sae.id))
-            .unwrap()
-            .write_all(&client_cert.to_pem().unwrap())
-            .unwrap();
-        File::create(format!("{}/client_{}_key.pem", directory, sae.id))
-            .unwrap()
-            .write_all(&client_pkey.private_key_to_pem_pkcs8().unwrap())
-            .unwrap();
+        let mut pem_client_key = File::create(format!("{}/client_{}_cert.pem", directory, sae.id)).unwrap();
+        pem_client_key.write_all(&client_pkey.private_key_to_pem_pkcs8().unwrap()).unwrap();
+        pem_client_key.write_all(&client_cert.to_pem().unwrap()).unwrap();
 
         let pkcs12 = Pkcs12::builder()
             .name(&format!("SAE-{}", sae.id))
