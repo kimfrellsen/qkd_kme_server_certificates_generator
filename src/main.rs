@@ -12,6 +12,7 @@ use openssl::x509::{X509NameBuilder, X509ReqBuilder, X509};
 use std::fs::File;
 use std::io::Write;
 use std::string::String;
+use openssl::x509::extension::{BasicConstraints, KeyUsage};
 
 const INTER_KMES_SUBDIR: &'static str = "/inter_kmes/";
 
@@ -79,6 +80,13 @@ fn generate_inter_kmes_certificates(directory: &str, kmes: &Vec<KmeConfig>, cert
             .unwrap();
         ca_cert_builder.set_serial_number(&gen_random_serial()).unwrap();
         ca_cert_builder.sign(&ca_pkey, MessageDigest::sha256()).unwrap();
+
+        let basic_constraints = BasicConstraints::new().ca().build().unwrap();
+        ca_cert_builder.append_extension(basic_constraints).unwrap();
+
+        let key_usage = KeyUsage::new().key_cert_sign().crl_sign().build().unwrap();
+        ca_cert_builder.append_extension(key_usage).unwrap();
+
         let ca_cert = ca_cert_builder.build();
 
         File::create(format!("{}/ca_kme{}.key", directory, kme.id))
@@ -93,11 +101,18 @@ fn generate_inter_kmes_certificates(directory: &str, kmes: &Vec<KmeConfig>, cert
         let server_key = EcKey::generate(&group).unwrap();
         let server_pkey = PKey::from_ec_key(server_key).unwrap();
 
+        let mut server_cert_builder = X509::builder().unwrap();
+
         let mut server_name_builder = X509NameBuilder::new().unwrap();
         server_name_builder.append_entry_by_text("CN", kme.addr_for_kmes.as_str()).unwrap();
+        server_name_builder.append_entry_by_text("subjectAltName", format!("DNS:{}", kme.addr_for_kmes).as_str()).unwrap();
         let server_name = server_name_builder.build();
 
-        let mut server_cert_builder = X509::builder().unwrap();
+        let mut alt_name_builder = openssl::x509::extension::SubjectAlternativeName::new();
+        alt_name_builder.dns(kme.addr_for_kmes.as_str());
+        let alt_name_extension = alt_name_builder.build(&server_cert_builder.x509v3_context(None, None)).unwrap();
+        server_cert_builder.append_extension(alt_name_extension).unwrap();
+
         server_cert_builder.set_version(2).unwrap();
         server_cert_builder.set_subject_name(&server_name).unwrap();
         server_cert_builder.set_issuer_name(&ca_cert.subject_name()).unwrap();
@@ -201,6 +216,13 @@ fn generate_zone_certificates(directory: &str, kme_config: &KmeConfig, cert_exp_
         .unwrap();
     ca_builder.set_serial_number(&gen_random_serial()).unwrap();
     ca_builder.sign(&ca_pkey, MessageDigest::sha256()).unwrap();
+
+    let basic_constraints = BasicConstraints::new().ca().build().unwrap();
+    ca_builder.append_extension(basic_constraints).unwrap();
+
+    let key_usage = KeyUsage::new().key_cert_sign().crl_sign().build().unwrap();
+    ca_builder.append_extension(key_usage).unwrap();
+
     let ca_cert = ca_builder.build();
 
     File::create(format!("{}/ca.crt", directory))
@@ -276,11 +298,17 @@ fn generate_zone_certificates(directory: &str, kme_config: &KmeConfig, cert_exp_
     let server_ec = EcKey::generate(&group).unwrap();
     let server_pkey = PKey::from_ec_key(server_ec).unwrap();
 
+    let mut server_builder = X509::builder().unwrap();
     let mut server_name_builder = X509NameBuilder::new().unwrap();
     server_name_builder
         .append_entry_by_text("CN", kme_config.addr_for_saes.as_str())
         .unwrap();
     let server_name = server_name_builder.build();
+
+    let mut alt_name_builder = openssl::x509::extension::SubjectAlternativeName::new();
+    alt_name_builder.dns(kme_config.addr_for_saes.as_str());
+    let alt_name_extension = alt_name_builder.build(&server_builder.x509v3_context(None, None)).unwrap();
+    server_builder.append_extension(alt_name_extension).unwrap();
 
     let mut server_req_builder = X509ReqBuilder::new().unwrap();
     server_req_builder.set_pubkey(&server_pkey).unwrap();
@@ -288,7 +316,6 @@ fn generate_zone_certificates(directory: &str, kme_config: &KmeConfig, cert_exp_
     server_req_builder.sign(&server_pkey, MessageDigest::sha256()).unwrap();
     let server_req = server_req_builder.build();
 
-    let mut server_builder = X509::builder().unwrap();
     server_builder.set_version(2).unwrap();
     server_builder.set_subject_name(server_req.subject_name()).unwrap();
     server_builder.set_issuer_name(ca_cert.subject_name()).unwrap();
