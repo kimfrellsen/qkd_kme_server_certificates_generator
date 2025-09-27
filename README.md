@@ -8,6 +8,12 @@ So that you can avoid manual and error-prone operations using OpenSSL commands.
 
 ## Installation
 
+### Use pre-built binaries
+
+We provide pre-built binaries for some platforms in the [releases section](https://github.com/thomasarmel/qkd_kme_server_certificates_generator/releases).
+
+### Compile
+
 Install Rust programming language, as explained at https://www.rust-lang.org/tools/install.
 
 ```bash
